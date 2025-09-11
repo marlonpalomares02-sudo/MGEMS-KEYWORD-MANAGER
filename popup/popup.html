@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="popup.css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+</head>
+<body>
+  <div class="header">
+    <div>
+      <h1 class="title">Mgemz Keyword Manager</h1>
+      <p class="tagline">Your Smart Keyword Assistant</p>
+    </div>
+    <div>
+      <button id="settings-btn" class="icon-btn">
+        <span class="material-icons">settings</span>
+      </button>
+      <button id="export-btn" class="export-btn">
+        <span class="material-icons">download</span> Export
+      </button>
+    </div>
+  </div>
+
+  <div id="settings-panel" class="settings-panel hidden">
+    <h2>Settings</h2>
+    <div class="setting-option">
+      <label for="capitalize-keywords">Capitalize Keywords</label>
+      <input type="checkbox" id="capitalize-keywords">
+    </div>
+    <div class="setting-option">
+      <label for="gradient-start">Gradient Start</label>
+      <input type="color" id="gradient-start" value="#4e54c8">
+    </div>
+    <div class="setting-option">
+      <label for="gradient-end">Gradient End</label>
+      <input type="color" id="gradient-end" value="#8f94fb">
+    </div>
+    <div class="setting-option">
+      <label for="font-select">Font</label>
+      <select id="font-select">
+        <option value="Roboto">Roboto</option>
+        <option value="Open Sans">Open Sans</option>
+        <option value="Lato">Lato</option>
+        <option value="Montserrat">Montserrat</option>
+      </select>
+    </div>
+    <div class="setting-option">
+      <label for="font-size">Font Size</label>
+      <input type="range" id="font-size" min="12" max="20" value="16">
+    </div>
+    <div class="setting-option">
+      <label for="deepseek-api-key">DeepSeek API Key</label>
+      <div class="api-key-container">
+        <input type="password" id="deepseek-api-key" placeholder="Paste your API key">
+        <button id="save-api-key-btn" class="save-btn">Save</button>
+      </div>
+    </div>
+    <div class="setting-option">
+      <label>Clear Saved Data</label>
+      <button id="clear-storage-btn" class="clear-btn">
+        <span class="material-icons">delete_sweep</span> Clear Storage
+      </button>
+    </div>
+  </div>
+
+  <div class="match-type-controls">
+    <div class="match-type-option">
+      <input type="radio" id="broad" name="match-type" value="broad">
+      <label for="broad">Broad</label>
+    </div>
+    <div class="match-type-option">
+      <input type="radio" id="phrase" name="match-type" value="phrase" checked>
+      <label for="phrase">Phrase</label>
+    </div>
+    <div class="match-type-option">
+      <input type="radio" id="exact" name="match-type" value="exact">
+      <label for="exact">Exact</label>
+    </div>
+  </div>
+
+  <div class="suggestions-section">
+    <button id="get-suggestions-btn" class="bottom-btn suggestions-btn">
+      <span class="material-icons">auto_awesome</span> High-Intent Keyword Suggestions
+    </button>
+    <details id="suggestions-details" class="hidden">
+      <summary><h3>High-Intent Keyword Suggestions</h3></summary>
+      <div id="suggestions-container" class="suggestions-container">
+        <!-- AI suggestions will be dynamically added here -->
+      </div>
+    </details>
+    <button id="regenerate-btn" class="bottom-btn hidden">
+      <span class="material-icons">refresh</span> Regenerate
+    </button>
+  </div>
+
+  <div class="generation-section">
+    <button id="generate-ads-btn" class="bottom-btn">
+      <span class="material-icons">text_fields</span> Generate Headlines & Descriptions
+    </button>
+    <button id="regenerate-ads-btn" class="bottom-btn hidden">
+      <span class="material-icons">refresh</span> Regenerate Ads
+    </button>
+    <div id="ads-container" class="ads-container hidden">
+      <details open>
+        <summary><h3>Generated Headlines</h3></summary>
+        <div id="headlines-container"></div>
+      </details>
+      <details open>
+        <summary><h3>Generated Descriptions</h3></summary>
+        <div id="descriptions-container"></div>
+      </details>
+      <details open>
+        <summary><h3>Call-to-Action Phrases</h3></summary>
+        <div id="cta-container"></div>
+      </details>
+    </div>
+  </div>
+
+  <div id="keywords-container" class="keywords-container">
+    <!-- Keywords will be dynamically added here -->
+  </div>
+
+  <div class="bulk-add">
+    <textarea id="bulk-paste-area" class="bulk-paste-area" placeholder="Paste keywords here (one per line)"></textarea>
+    <button id="bulk-paste-btn" class="bottom-btn">Add Keywords</button>
+  </div>
+
+  <div class="bottom-actions">
+    <button class="bottom-btn copy-all" id="copy-all-btn">
+      <span class="material-icons">content_copy</span> Copy All
+    </button>
+    <button class="bottom-btn remove-all" id="remove-all-btn">
+      <span class="material-icons">delete</span> Remove All
+    </button>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

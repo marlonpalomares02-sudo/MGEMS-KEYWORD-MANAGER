@@ -1,0 +1,12 @@
+.keyword-highlight {
+    background-color: #FFF9C4 !important;
+    box-shadow: 0 0 0 2px #FFEB3B !important;
+    transition: all 0.3s ease;
+    animation: pulse 0.5s;
+  }
+  
+  @keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.02); }
+    100% { transform: scale(1); }
+  }

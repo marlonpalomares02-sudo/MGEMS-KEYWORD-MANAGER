@@ -1,0 +1,50 @@
+{
+  "manifest_version": 3,
+  "name": "Mgemz Keyword Manager",
+  "description": "your smart keyword assistant.",
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  },
+  "version": "2.1",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "clipboardWrite",
+    "notifications",
+    "contextMenus",
+    "downloads"
+  ],
+  "host_permissions": [
+    "https://ads.google.com/*",
+    "https://keywordplanner.google.com/*",
+    "https://api.deepseek.com/*"
+  ],
+  "background": {
+    "service_worker": "background_scripts/background.js"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://ads.google.com/*", "https://keywordplanner.google.com/*"],
+      "exclude_matches": [],
+      "js": ["content_scripts/content.js"],
+      "css": ["content_scripts/content.css", "content_scripts/keywordPlanner.css"],
+      "run_at": "document_end"
+    }
+  ]
+}
