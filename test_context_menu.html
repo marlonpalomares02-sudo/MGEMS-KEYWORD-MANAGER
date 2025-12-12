@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Context Menu Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-area { 
+            border: 2px dashed #ccc; 
+            padding: 20px; 
+            margin: 20px 0; 
+            background: #f9f9f9;
+        }
+        .keyword { 
+            background: #e3f2fd; 
+            padding: 5px 10px; 
+            margin: 5px; 
+            display: inline-block; 
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        .status { margin: 10px 0; padding: 10px; border-radius: 3px; }
+        .success { background: #c8e6c9; color: #2e7d32; }
+        .error { background: #ffcdd2; color: #c62828; }
+        .info { background: #e1f5fe; color: #0277bd; }
+    </style>
+</head>
+<body>
+    <h1>Google Ads Keyword Manager - Context Menu Test</h1>
+    
+    <div class="test-area">
+        <h2>Test Keywords (Right-click to add)</h2>
+        <p>Select and right-click on any of these keywords to test the context menu:</p>
+        <div id="keyword-container">
+            <span class="keyword">digital marketing</span>
+            <span class="keyword">seo services</span>
+            <span class="keyword">ppc advertising</span>
+            <span class="keyword">social media marketing</span>
+            <span class="keyword">content marketing</span>
+        </div>
+        <div id="context-status" class="status info">Right-click on a keyword above to test the context menu</div>
+    </div>
+    
+    <div class="test-area">
+        <h2>Manual Test</h2>
+        <p>Enter a keyword and click "Add Manually":</p>
+        <input type="text" id="manual-keyword" placeholder="Enter keyword">
+        <button onclick="addManualKeyword()">Add Manually</button>
+        <div id="manual-status" class="status info">Enter a keyword and click the button</div>
+    </div>
+    
+    <div class="test-area">
+        <h2>Extension Status</h2>
+        <div id="extension-status" class="status info">Checking extension status...</div>
+    </div>
+    
+    <div class="test-area">
+        <h2>Test Instructions</h2>
+        <ol>
+            <li><strong>Context Menu Test:</strong> Right-click on any keyword above. You should see "Add to Keyword Manager" in the context menu.</li>
+            <li><strong>Manual Test:</strong> Enter a keyword and click "Add Manually" to test direct communication with the extension.</li>
+            <li><strong>Check Status:</strong> The extension status will update automatically.</li>
+        </ol>
+        <p><strong>Note:</strong> Make sure you're on a Google Ads domain (ads.google.com) for the context menu to appear.</p>
+    </div>
+
+    <script>
+        let testKeywords = [];
+        
+        function updateStatus(elementId, message, type = 'info') {
+            const element = document.getElementById(elementId);
+            element.className = `status ${type}`;
+            element.textContent = message;
+        }
+        
+        async function checkExtensionStatus() {
+            try {
+                if (typeof chrome === 'undefined' || !chrome.runtime) {
+                    updateStatus('extension-status', 'Chrome runtime not available', 'error');
+                    return;
+                }
+                
+                const response = await chrome.runtime.sendMessage({action: 'checkTrialStatus'});
+                
+                if (response) {
+                    const status = response.trialActive ? 'Active' : 'Inactive';
+                    const timeRemaining = response.timeRemaining || 'Unknown';
+                    updateStatus('extension-status', `Extension detected - Trial: ${status}, Time: ${timeRemaining}`, 'success');
+                } else {
+                    updateStatus('extension-status', 'Extension detected but no response', 'warning');
+                }
+            } catch (error) {
+                updateStatus('extension-status', `Extension error: ${error.message}`, 'error');
+                if (error.message.includes('Extension context invalidated')) {
+                    updateStatus('extension-status', 'Extension context invalidated - try reloading', 'error');
+                }
+            }
+        }
+        
+        async function addManualKeyword() {
+            const input = document.getElementById('manual-keyword');
+            const keyword = input.value.trim();
+            
+            if (!keyword) {
+                updateStatus('manual-status', 'Please enter a keyword', 'error');
+                return;
+            }
+            
+            try {
+                const response = await chrome.runtime.sendMessage({
+                    action: 'addKeyword',
+                    keyword: {
+                        text: keyword,
+                        timestamp: Date.now(),
+                        source: 'manual_test'
+                    }
+                });
+                
+                if (response && response.success) {
+                    updateStatus('manual-status', `Keyword "${keyword}" added successfully!`, 'success');
+                    input.value = '';
+                    testKeywords.push(keyword);
+                } else {
+                    updateStatus('manual-status', `Failed to add keyword: ${response.error}`, 'error');
+                }
+            } catch (error) {
+                updateStatus('manual-status', `Error: ${error.message}`, 'error');
+            }
+        }
+        
+        // Monitor right-clicks on keywords
+        document.addEventListener('contextmenu', function(e) {
+            if (e.target.classList.contains('keyword')) {
+                const keyword = e.target.textContent;
+                updateStatus('context-status', `Right-clicked on: "${keyword}" - Check context menu for "Add to Keyword Manager"`, 'info');
+                console.log('Right-clicked on keyword:', keyword);
+            }
+        });
+        
+        // Monitor selection changes
+        document.addEventListener('selectionchange', function() {
+            const selection = window.getSelection().toString().trim();
+            if (selection) {
+                console.log('Text selected:', selection);
+            }
+        });
+        
+        // Check status on load and periodically
+        window.addEventListener('load', checkExtensionStatus);
+        setInterval(checkExtensionStatus, 5000);
+        
+        // Log all extension messages
+        if (chrome.runtime) {
+            chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+                console.log('Received message from extension:', message);
+            });
+        }
+    </script>
+</body>
+</html>

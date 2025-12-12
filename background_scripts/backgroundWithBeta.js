@@ -1,13 +1,30 @@
 console.log('Background script with beta manager loaded');
 
+// Load beta manager script at the top level (service worker compatible)
+let betaManager = null;
+let isExtensionUnlocked = false;
+
+// Try to load beta manager, but allow fallback
+try {
+  console.log('📦 Attempting to load betaManager.js...');
+  importScripts('betaManager.js');
+  console.log('✅ Beta manager script loaded successfully at top level');
+  console.log('🔍 BetaManager class available:', typeof BetaManager);
+} catch (error) {
+  console.error('❌ Failed to load beta manager script at top level:', error);
+  console.error('📋 Error details:', error.message);
+  console.error('🗂️ Error stack:', error.stack);
+  console.log('🔧 Proceeding in development mode without beta manager');
+  // Allow extension to run without beta manager
+  isExtensionUnlocked = true;
+}
+
 // Global error handler for the background script
 self.addEventListener('error', (event) => {
   console.error('Unhandled error in background script:', event.error);
 });
 
 let keywords = [];
-let betaManager = null;
-let isExtensionUnlocked = false;
 
 // Promisified storage access
 const storage = {
@@ -29,10 +46,17 @@ async function initializeBetaSystem() {
   try {
     console.log('🚀 Initializing beta system...');
     
-    // Load beta manager
-    await loadBetaManager();
+    // Check if BetaManager is available (already loaded at top level)
+    if (typeof BetaManager === 'undefined') {
+      console.warn('⚠️ BetaManager class is not available - running in development mode');
+      isExtensionUnlocked = true;
+      await initializeExtension();
+      return;
+    }
     
-    // Initialize beta manager
+    console.log('✅ BetaManager class is available');
+    
+    // Initialize beta manager instance
     betaManager = new BetaManager();
     const trialStatus = await betaManager.initialize();
     
@@ -45,30 +69,23 @@ async function initializeBetaSystem() {
       console.log('🔒 Extension is locked - trial expired or not activated');
       // Extension will remain in locked state
     } else {
-      console.log('✅ Extension is unlocked and active');
-      // Continue with normal initialization
+      console.log('🔓 Extension is unlocked - trial active');
+      // Initialize extension functionality
       await initializeExtension();
     }
     
+    console.log('✅ Beta system initialization completed');
+    
   } catch (error) {
     console.error('❌ Failed to initialize beta system:', error);
+    console.error('📋 Error details:', error.message);
+    console.error('🗂️ Error stack:', error.stack);
+    
+    // Fallback: allow extension to run in development mode
+    console.warn('⚠️ Allowing extension to run in fallback mode');
     // Fallback: allow extension to run (for development)
     isExtensionUnlocked = true;
-    await initializeExtension();
-  }
-}
-
-/**
- * Load beta manager script
- */
-async function loadBetaManager() {
-  try {
-    // Use importScripts for service worker context
-    importScripts(chrome.runtime.getURL('background_scripts/betaManager.js'));
-    console.log('✅ Beta manager script loaded successfully');
-  } catch (error) {
-    console.error('❌ Failed to load beta manager script:', error);
-    throw error;
+    initializeExtension(); // Don't await in fallback mode
   }
 }
 
@@ -115,17 +132,25 @@ async function updateBadge() {
 async function loadSavedKeywords() {
   const data = await storage.get(['keywords']);
   keywords = data.keywords || [];
+  console.log('Loaded keywords:', keywords.length);
   await updateBadge();
 }
 
 // Setup context menu - now dynamic based on tab URL
 function setupContextMenu() {
   chrome.contextMenus.removeAll(() => {
-    // Create context menu only for selection context
+    // Create context menu for selection context
     chrome.contextMenus.create({
       id: "addKeyword",
       title: "Add to Keyword Manager",
       contexts: ["selection"]
+    });
+    
+    // Create context menu for bulk addition (page context)
+    chrome.contextMenus.create({
+      id: "addBulkKeywords",
+      title: "Add All Selected Keywords",
+      contexts: ["page"]
     });
   });
 }
@@ -144,7 +169,7 @@ async function updateContextMenuForTab(tabId) {
     
     console.log('Tab URL:', tab.url, 'Is Google Ads page:', isGoogleAdsPage);
     
-    // Update context menu visibility
+    // Update context menu visibility for both menu items
     chrome.contextMenus.update("addKeyword", {
       visible: isGoogleAdsPage
     }, () => {
@@ -153,20 +178,28 @@ async function updateContextMenuForTab(tabId) {
       }
     });
     
+    chrome.contextMenus.update("addBulkKeywords", {
+      visible: isGoogleAdsPage
+    }, () => {
+      if (chrome.runtime.lastError) {
+        console.log('Bulk context menu update error:', chrome.runtime.lastError.message);
+      }
+    });
+    
   } catch (error) {
     console.log('Error updating context menu for tab:', error.message);
   }
 }
 
-// Extension installation/startup handlers
-chrome.runtime.onInstalled.addListener(() => {
-  console.log('Extension installed/updated');
-  initializeBetaSystem();
+// Extension startup
+chrome.runtime.onInstalled.addListener(async () => {
+  console.log('Extension installed');
+  await initializeBetaSystem();
 });
 
-chrome.runtime.onStartup.addListener(() => {
+chrome.runtime.onStartup.addListener(async () => {
   console.log('Extension startup');
-  initializeBetaSystem();
+  await initializeBetaSystem();
 });
 
 // Context menu click handler
@@ -207,8 +240,8 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
           const keywordObject = {
             text: keywordText,
             timestamp: Date.now(),
-            source: 'context_menu',
-            potentiallyInvalid: true
+            source: 'google_ads_context_menu',
+            isValid: false
           };
           addKeyword(keywordObject);
           return;
@@ -221,48 +254,20 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
       timestamp: Date.now(),
       source: 'context_menu'
     };
-
+    
     addKeyword(keywordObject);
-
-    // Prevent script execution on restricted pages by whitelisting protocols
-    if (!tab || !tab.id || !tab.url || !/^(https?|file):/.test(tab.url)) {
-      console.log('Cannot execute highlight script on a restricted page:', tab ? tab.url : 'unknown');
-      return;
-    }
-
-    // Inject content script to highlight the selection
-    chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: (keyword) => {
-        const selection = window.getSelection();
-        if (!selection || !selection.rangeCount) return;
-        try {
-          const range = selection.getRangeAt(0);
-          const span = document.createElement('span');
-          span.style.cssText = `
-            background-color: #FFF9C4 !important;
-            border: 2px solid #FFEB3B !important;
-            border-radius: 3px !important;
-            animation: pulse 0.5s !important;
-          `;
-          range.surroundContents(span);
-          setTimeout(() => {
-            if (span && span.parentNode) {
-              const parent = span.parentNode;
-              parent.insertBefore(document.createTextNode(span.textContent), span);
-              parent.removeChild(span);
-            }
-          }, 2000);
-        } catch (e) {
-          console.log('Complex selection, unable to highlight.');
-        }
-      },
-      args: [keywordText]
-    }).catch(error => console.error('Failed to execute highlight script:', error));
+  }
+  
+  if (info.menuItemId === "addBulkKeywords") {
+    console.log('Bulk keyword addition requested');
+    // Send message to content script to handle bulk addition
+    chrome.tabs.sendMessage(tab.id, { action: 'triggerBulkKeywordAddition' }).catch(error => {
+      console.error('Failed to send bulk keywords message:', error);
+    });
   }
 });
 
-// Main message handler with beta checking
+// Message handler
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   console.log('Received message:', request);
   
@@ -305,7 +310,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           if (betaManager) {
             response = betaManager.getTrialStatus();
           } else {
-            response = { trialActive: isExtensionUnlocked };
+            response = { trialActive: isExtensionUnlocked, timeRemaining: 'Unlimited (Development Mode)' };
           }
           break;
         case 'unlockExtension':
@@ -313,25 +318,30 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             response = await betaManager.unlockWithPassword(request.password);
             if (response.success) {
               isExtensionUnlocked = true;
-              await initializeExtension(); // Initialize extension after unlock
+              await initializeExtension();
             }
           } else {
-            response = { success: false, error: 'Beta manager not initialized' };
+            // Development mode - accept any password
+            isExtensionUnlocked = true;
+            await initializeExtension();
+            response = { success: true, message: 'Extension unlocked in development mode' };
           }
           break;
         default:
-          console.log('Unknown action:', request.action);
           response = { success: false, error: 'Unknown action' };
       }
+      
       sendResponse(response);
     } catch (error) {
-      console.error(`Error handling action "${request.action}":`, error);
+      console.error('Error handling message:', error);
       sendResponse({ success: false, error: error.message });
     }
   })();
-  return true; // Keep the message channel open for async response
+  
+  return true; // Keep message channel open for async response
 });
 
+// Keyword management functions
 async function addKeyword(keywordObject) {
   if (!keywordObject || !keywordObject.text) {
     return { success: false, error: 'Invalid keyword data' };
@@ -362,7 +372,8 @@ async function addKeywordsBulk(keywordObjects) {
   for (const keywordObject of keywordObjects) {
     const isDuplicate = keywords.some(k => k.text === keywordObject.text);
     if (!isDuplicate) {
-      keywords.push({ ...keywordObject, matchType: keywordObject.matchType || 'broad' });
+      const newKeyword = { ...keywordObject, matchType: keywordObject.matchType || 'broad' };
+      keywords.push(newKeyword);
       totalAdded++;
     } else {
       duplicates.push(keywordObject.text);
@@ -372,141 +383,68 @@ async function addKeywordsBulk(keywordObjects) {
   if (totalAdded > 0) {
     await storage.set({ keywords });
     await updateBadge();
+    
+    // Notify popups/other parts of the extension
     chrome.runtime.sendMessage({ action: 'keywordsUpdated' }).catch(() => {});
   }
   
-  return { success: true, totalAdded, duplicates };
+  return { 
+    success: true, 
+    totalAdded: totalAdded,
+    duplicates: duplicates
+  };
 }
 
-async function removeKeyword(keywordToRemove) {
-  console.log('Received removeKeyword request:', keywordToRemove);
-  const keywordText = typeof keywordToRemove === 'string' ? keywordToRemove : keywordToRemove.text;
-  const initialCount = keywords.length;
+async function removeKeyword(keywordText) {
+  const initialLength = keywords.length;
   keywords = keywords.filter(k => k.text !== keywordText);
   
-  if (keywords.length < initialCount) {
+  if (keywords.length < initialLength) {
     await storage.set({ keywords });
     await updateBadge();
-    chrome.runtime.sendMessage({ action: 'keywordsUpdated' }).catch(() => {}); // Notify UI
-    showNotification('Success', `Keyword removed. ${keywords.length} keywords remaining.`);
-    return { success: true, count: keywords.length };
+    
+    // Notify popups/other parts of the extension
+    chrome.runtime.sendMessage({ action: 'keywordsUpdated' }).catch(() => {});
+    
+    return { success: true };
   }
   
   return { success: false, error: 'Keyword not found' };
 }
 
 async function clearKeywords() {
-  console.log('Received clearKeywords request');
   keywords = [];
-  await storage.set({ keywords: [] });
+  await storage.set({ keywords });
   await updateBadge();
+  
+  // Notify popups/other parts of the extension
+  chrome.runtime.sendMessage({ action: 'keywordsUpdated' }).catch(() => {});
+  
   return { success: true };
 }
 
-function formatKeywordByMatchType(keyword, matchType) {
-  switch (matchType) {
-    case 'phrase': return `"${keyword}"`;
-    case 'exact': return `[${keyword}]`;
-    default: return keyword;
-  }
-}
-
 async function exportKeywords(matchType) {
-  try {
-    // Get keywords
-    const keywordsText = keywords.map(k => formatKeywordByMatchType(k.text, matchType || k.matchType)).join('\n');
-    
-    // Get stored ads data
-    const { generatedHeadlines, generatedDescriptions, generatedCallToActions } = await chrome.storage.local.get([
-      'generatedHeadlines', 'generatedDescriptions', 'generatedCallToActions'
-    ]);
-    
-    // Build comprehensive export content
-    let exportContent = '';
-    
-    // Add high-intent keywords section
-    exportContent += 'HIGH-INTENT KEYWORDS\n';
-    exportContent += '===================\n';
-    exportContent += keywordsText;
-    exportContent += '\n\n';
-    
-    // Add headlines section
-    if (generatedHeadlines && generatedHeadlines.length > 0) {
-      exportContent += 'AD HEADLINES\n';
-      exportContent += '=============\n';
-      exportContent += generatedHeadlines.join('\n');
-      exportContent += '\n\n';
-    }
-    
-    // Add descriptions section
-    if (generatedDescriptions && generatedDescriptions.length > 0) {
-      exportContent += 'AD DESCRIPTIONS\n';
-      exportContent += '================\n';
-      exportContent += generatedDescriptions.join('\n');
-      exportContent += '\n\n';
-    }
-    
-    // Add call-to-actions section
-    if (generatedCallToActions && generatedCallToActions.length > 0) {
-      exportContent += 'CALL-TO-ACTIONS (CTAs)\n';
-      exportContent += '======================\n';
-      exportContent += generatedCallToActions.join('\n');
-      exportContent += '\n\n';
-    }
-    
-    const dataUri = 'data:text/plain;charset=utf-8,' + encodeURIComponent(exportContent);
-
-    const downloadId = await new Promise((resolve, reject) => {
-      chrome.downloads.download({
-        url: dataUri,
-        filename: `google-ads-export-${new Date().toISOString().split('T')[0]}.txt`,
-        saveAs: true
-      }, (id) => {
-        if (chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message));
-        } else {
-          resolve(id);
-        }
-      });
-    });
-
-    if (downloadId === undefined) {
-      throw new Error('Download failed to start. The browser may have blocked it.');
-    }
-
-    return { success: true };
-  } catch (error) {
-    console.error('Failed to export keywords:', error);
-    throw new Error(`Unable to download file: ${error.message}`);
+  const keywordsToExport = matchType === 'all' ? keywords : keywords.filter(k => k.matchType === matchType);
+  
+  if (keywordsToExport.length === 0) {
+    return { success: false, error: 'No keywords to export' };
   }
-}
-
-function showNotification(title, message) {
-  // Try with icon first, fallback to no icon if download fails
+  
+  const csvContent = keywordsToExport.map(k => k.text).join('\n');
+  const blob = new Blob([csvContent], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  
+  const filename = `keywords_${matchType}_${new Date().toISOString().split('T')[0]}.csv`;
+  
   try {
-    chrome.notifications.create({
-      type: "basic",
-      iconUrl: chrome.runtime.getURL("icons/icon48.png"),
-      title: title,
-      message: message
-    }, (notificationId) => {
-      if (chrome.runtime.lastError) {
-        console.warn('Notification with icon failed:', chrome.runtime.lastError.message);
-        // Fallback: create notification without icon
-        chrome.notifications.create({
-          type: "basic",
-          title: title,
-          message: message
-        });
-      }
+    await chrome.downloads.download({
+      url: url,
+      filename: filename,
+      saveAs: true
     });
+    
+    return { success: true, count: keywordsToExport.length };
   } catch (error) {
-    console.error('Notification creation failed:', error);
-    // Final fallback: create notification without icon
-    chrome.notifications.create({
-      type: "basic",
-      title: title,
-      message: message
-    });
+    return { success: false, error: error.message };
   }
 }

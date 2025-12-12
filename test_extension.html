@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Extension Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; }
+        .success { color: green; }
+        .error { color: red; }
+        .warning { color: orange; }
+    </style>
+</head>
+<body>
+    <h1>Google Ads Keyword Manager - Extension Test</h1>
+    
+    <div class="test-section">
+        <h2>Extension Status</h2>
+        <div id="extension-status">Checking...</div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Context Menu Test</h2>
+        <p>Select this text and right-click to test the context menu:</p>
+        <p><strong>test keyword example</strong></p>
+        <div id="context-menu-status">Waiting for test...</div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Manual Keyword Addition</h2>
+        <input type="text" id="keyword-input" placeholder="Enter a keyword">
+        <button onclick="addTestKeyword()">Add Keyword</button>
+        <div id="manual-add-status"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Extension Logs</h2>
+        <div id="logs"></div>
+    </div>
+
+    <script>
+        let logs = [];
+        
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = `[${timestamp}] ${message}`;
+            logs.push({message: logEntry, type: type});
+            updateLogs();
+        }
+        
+        function updateLogs() {
+            const logsDiv = document.getElementById('logs');
+            logsDiv.innerHTML = logs.map(log => 
+                `<div class="${log.type}">${log.message}</div>`
+            ).join('');
+            logsDiv.scrollTop = logsDiv.scrollHeight;
+        }
+        
+        async function checkExtensionStatus() {
+            try {
+                // Check if extension is installed
+                if (typeof chrome === 'undefined' || !chrome.runtime) {
+                    document.getElementById('extension-status').innerHTML = 
+                        '<span class="error">Extension not detected - Chrome runtime not available</span>';
+                    log('Chrome runtime not available', 'error');
+                    return;
+                }
+                
+                // Try to send a message to the extension
+                const response = await chrome.runtime.sendMessage({action: 'checkTrialStatus'});
+                
+                if (response) {
+                    document.getElementById('extension-status').innerHTML = 
+                        `<span class="success">Extension detected and responding</span><br>
+                         Trial Status: ${response.trialActive ? 'Active' : 'Inactive'}<br>
+                         Time Remaining: ${response.timeRemaining || 'Unknown'}`;
+                    log('Extension is working properly', 'success');
+                } else {
+                    document.getElementById('extension-status').innerHTML = 
+                        '<span class="warning">Extension detected but no response</span>';
+                    log('Extension detected but no response received', 'warning');
+                }
+            } catch (error) {
+                document.getElementById('extension-status').innerHTML = 
+                    `<span class="error">Extension error: ${error.message}</span>`;
+                log(`Extension error: ${error.message}`, 'error');
+                
+                if (error.message.includes('Extension context invalidated')) {
+                    log('Extension context invalidated - try reloading the extension', 'error');
+                }
+            }
+        }
+        
+        async function addTestKeyword() {
+            const keywordInput = document.getElementById('keyword-input');
+            const keyword = keywordInput.value.trim();
+            
+            if (!keyword) {
+                alert('Please enter a keyword');
+                return;
+            }
+            
+            try {
+                const response = await chrome.runtime.sendMessage({
+                    action: 'addKeyword',
+                    keyword: {
+                        text: keyword,
+                        timestamp: Date.now(),
+                        source: 'manual_test'
+                    }
+                });
+                
+                if (response && response.success) {
+                    document.getElementById('manual-add-status').innerHTML = 
+                        `<span class="success">Keyword "${keyword}" added successfully!</span>`;
+                    log(`Keyword "${keyword}" added successfully`, 'success');
+                    keywordInput.value = '';
+                } else {
+                    document.getElementById('manual-add-status').innerHTML = 
+                        `<span class="error">Failed to add keyword: ${response.error}</span>`;
+                    log(`Failed to add keyword: ${response.error}`, 'error');
+                }
+            } catch (error) {
+                document.getElementById('manual-add-status').innerHTML = 
+                    `<span class="error">Error: ${error.message}</span>`;
+                log(`Error adding keyword: ${error.message}`, 'error');
+            }
+        }
+        
+        // Listen for context menu clicks
+        document.addEventListener('contextmenu', function(e) {
+            const selection = window.getSelection().toString().trim();
+            if (selection) {
+                log(`Context menu opened with selection: "${selection}"`, 'info');
+                document.getElementById('context-menu-status').innerHTML = 
+                    `Selection detected: "${selection}" - Check context menu for "Add to Keyword Manager" option`;
+            }
+        });
+        
+        // Check extension status on page load
+        window.addEventListener('load', checkExtensionStatus);
+        
+        // Check status every 5 seconds
+        setInterval(checkExtensionStatus, 5000);
+    </script>
+</body>
+</html>
