@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unlock Mgemz Keyword Manager</title>
+    <link rel="stylesheet" href="unlockDialog.css">
+</head>
+<body>
+    <div class="unlock-container">
+        <div class="unlock-header">
+            <img src="../assets/icons/icon48.png" alt="Mgemz Logo" class="unlock-logo">
+            <h2>Trial Period Expired</h2>
+            <p>Your 7-day trial has ended. Unlock the full version to continue using all features.</p>
+        </div>
+        
+        <div class="unlock-form">
+            <div class="form-group">
+                <label for="passwordInput">Enter Unlock Password:</label>
+                <input type="password" id="passwordInput" placeholder="Enter your password..." maxlength="20">
+                <div class="password-strength" id="passwordStrength"></div>
+            </div>
+            
+            <button id="unlockButton" class="unlock-button" disabled>
+                <span class="button-text">Unlock Extension</span>
+                <span class="button-loading" style="display: none;">Unlocking...</span>
+            </button>
+            
+            <div class="error-message" id="errorMessage" style="display: none;"></div>
+            <div class="success-message" id="successMessage" style="display: none;"></div>
+        </div>
+        
+        <div class="unlock-info">
+            <h3>Available Passwords:</h3>
+            <div class="password-list">
+                <div class="password-item">
+                    <code>Mgems091285</code>
+                    <span class="usage-count" id="usage1">Uses remaining: 3</span>
+                </div>
+                <div class="password-item">
+                    <code>Gems850912</code>
+                    <span class="usage-count" id="usage2">Uses remaining: 3</span>
+                </div>
+                <div class="password-item">
+                    <code>WelcomeVxi128509</code>
+                    <span class="usage-count" id="usage3">Uses remaining: 3</span>
+                </div>
+            </div>
+            
+            <div class="support-info">
+                <p><strong>Need help?</strong></p>
+                <p>Contact support for assistance or to purchase additional licenses.</p>
+                <button id="contactSupport" class="support-button">Contact Support</button>
+            </div>
+        </div>
+        
+        <div class="security-notice">
+            <p>🔒 This extension uses device fingerprinting to prevent trial abuse. 
+               Each device can only use each password once.</p>
+        </div>
+    </div>
+    
+    <script src="unlockDialog.js"></script>
+</body>
+</html>

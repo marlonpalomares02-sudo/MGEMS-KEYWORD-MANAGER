@@ -30,17 +30,15 @@ async function updateBadge() {
 
 // Load saved keywords
 async function loadSavedKeywords() {
-  const result = await storage.get(['keywords']);
-  if (result.keywords) {
-    console.log('Loaded keywords from storage:', result.keywords);
-    keywords = result.keywords;
-    await updateBadge();
-  }
+  const data = await storage.get(['keywords']);
+  keywords = data.keywords || [];
+  await updateBadge();
 }
 
-// Setup context menu
+// Setup context menu - now dynamic based on tab URL
 function setupContextMenu() {
   chrome.contextMenus.removeAll(() => {
+    // Create context menu only for selection context
     chrome.contextMenus.create({
       id: "addKeyword",
       title: "Add to Keyword Manager",
@@ -49,11 +47,60 @@ function setupContextMenu() {
   });
 }
 
+// Update context menu visibility based on current tab
+async function updateContextMenuForTab(tabId) {
+  try {
+    const tab = await chrome.tabs.get(tabId);
+    if (!tab || !tab.url) return;
+    
+    // Check if this is a Google Ads/Keyword Planner page
+    const isGoogleAdsPage = /https?:\/\/ads\.google\.com/.test(tab.url) ||
+                           /https?:\/\/ads\.google\.co\.[a-z]{2}/.test(tab.url) ||
+                           /https?:\/\/keywordplanner\.google\.com/.test(tab.url) ||
+                           /https?:\/\/ads\.googleapis\.com/.test(tab.url);
+    
+    console.log('Tab URL:', tab.url, 'Is Google Ads page:', isGoogleAdsPage);
+    
+    // Update context menu visibility
+    chrome.contextMenus.update("addKeyword", {
+      visible: isGoogleAdsPage
+    }, () => {
+      if (chrome.runtime.lastError) {
+        console.log('Context menu update error:', chrome.runtime.lastError.message);
+      }
+    });
+    
+  } catch (error) {
+    console.log('Error updating context menu for tab:', error.message);
+  }
+}
+
 // Initialize extension
 async function initialize() {
   console.log('Extension initializing...');
   setupContextMenu();
   await loadSavedKeywords();
+  
+  // Set up tab change listeners to update context menu visibility
+  chrome.tabs.onActivated.addListener((activeInfo) => {
+    updateContextMenuForTab(activeInfo.tabId);
+  });
+  
+  chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+    if (changeInfo.status === 'complete' && tab.active) {
+      updateContextMenuForTab(tabId);
+    }
+  });
+  
+  // Update context menu for currently active tab
+  try {
+    const tabs = await chrome.tabs.query({active: true, currentWindow: true});
+    if (tabs[0]) {
+      updateContextMenuForTab(tabs[0].id);
+    }
+  } catch (error) {
+    console.log('Error getting current tab:', error.message);
+  }
 }
 
 chrome.runtime.onInstalled.addListener(initialize);
@@ -64,15 +111,58 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (info.menuItemId === "addKeyword" && info.selectionText) {
     const keywordText = info.selectionText.trim();
     console.log('Adding keyword from context menu:', keywordText);
-    
+
+    // Enhanced validation for Google Keyword Planner context
+    if (tab && tab.url) {
+      const isGoogleAdsPage = /https?:\/\/ads\.google\.com/.test(tab.url) ||
+                             /https?:\/\/ads\.google\.co\.[a-z]{2}/.test(tab.url) ||
+                             /https?:\/\/keywordplanner\.google\.com/.test(tab.url) ||
+                             /https?:\/\/ads\.googleapis\.com/.test(tab.url);
+      
+      if (isGoogleAdsPage) {
+        // For Google Ads pages, validate that the selection looks like a keyword
+        // Filter out common column headers and non-keyword text
+        const invalidPatterns = [
+          /^(Keywords?|Keyword text|Search terms?|Volume|Competition|Avg\.?\s*CPC|Top\s*of\s*page\s*bid|Account|Campaign|Ad\s*group)$/i,
+          /^(Select\s+all|Select\s+keyword|Actions|Download|Edit|Remove)$/i,
+          /^\s*\d+\s*$/, // Pure numbers
+          /^\$\d+/, // Currency amounts
+          /^\d+\.?\d*%$/, // Percentages
+          /^\d+\.?\d*[KMkm]$/, // Numbers with K/M suffixes
+          /^[\s\-\–—]+$/, // Just dashes or spaces
+        ];
+        
+        const isValidKeyword = !invalidPatterns.some(pattern => pattern.test(keywordText));
+        
+        if (!isValidKeyword) {
+          console.log('Filtered out non-keyword text:', keywordText);
+          // Still add it but mark it as potentially invalid
+          const keywordObject = {
+            text: keywordText,
+            timestamp: Date.now(),
+            source: 'context_menu',
+            potentiallyInvalid: true
+          };
+          addKeyword(keywordObject);
+          return;
+        }
+      }
+    }
+
     const keywordObject = {
       text: keywordText,
       timestamp: Date.now(),
       source: 'context_menu'
     };
-    
+
     addKeyword(keywordObject);
-    
+
+    // Prevent script execution on restricted pages by whitelisting protocols
+    if (!tab || !tab.id || !tab.url || !/^(https?|file):/.test(tab.url)) {
+      console.log('Cannot execute highlight script on a restricted page:', tab ? tab.url : 'unknown');
+      return;
+    }
+
     // Inject content script to highlight the selection
     chrome.scripting.executeScript({
       target: { tabId: tab.id },
@@ -199,6 +289,7 @@ async function removeKeyword(keywordToRemove) {
   if (keywords.length < initialCount) {
     await storage.set({ keywords });
     await updateBadge();
+    chrome.runtime.sendMessage({ action: 'keywordsUpdated' }).catch(() => {}); // Notify UI
     showNotification('Success', `Keyword removed. ${keywords.length} keywords remaining.`);
     return { success: true, count: keywords.length };
   }
@@ -222,34 +313,102 @@ function formatKeywordByMatchType(keyword, matchType) {
   }
 }
 
-function exportKeywords(matchType) {
-  return new Promise((resolve, reject) => {
-    const text = keywords.map(k => formatKeywordByMatchType(k.text, matchType || k.matchType)).join('\n');
-    const dataUri = 'data:text/plain;charset=utf-8,' + encodeURIComponent(text);
+async function exportKeywords(matchType) {
+  try {
+    // Get keywords
+    const keywordsText = keywords.map(k => formatKeywordByMatchType(k.text, matchType || k.matchType)).join('\n');
+    
+    // Get stored ads data
+    const { generatedHeadlines, generatedDescriptions, generatedCallToActions } = await chrome.storage.local.get([
+      'generatedHeadlines', 'generatedDescriptions', 'generatedCallToActions'
+    ]);
+    
+    // Build comprehensive export content
+    let exportContent = '';
+    
+    // Add high-intent keywords section
+    exportContent += 'HIGH-INTENT KEYWORDS\n';
+    exportContent += '===================\n';
+    exportContent += keywordsText;
+    exportContent += '\n\n';
+    
+    // Add headlines section
+    if (generatedHeadlines && generatedHeadlines.length > 0) {
+      exportContent += 'AD HEADLINES\n';
+      exportContent += '=============\n';
+      exportContent += generatedHeadlines.join('\n');
+      exportContent += '\n\n';
+    }
+    
+    // Add descriptions section
+    if (generatedDescriptions && generatedDescriptions.length > 0) {
+      exportContent += 'AD DESCRIPTIONS\n';
+      exportContent += '================\n';
+      exportContent += generatedDescriptions.join('\n');
+      exportContent += '\n\n';
+    }
+    
+    // Add call-to-actions section
+    if (generatedCallToActions && generatedCallToActions.length > 0) {
+      exportContent += 'CALL-TO-ACTIONS (CTAs)\n';
+      exportContent += '======================\n';
+      exportContent += generatedCallToActions.join('\n');
+      exportContent += '\n\n';
+    }
+    
+    const dataUri = 'data:text/plain;charset=utf-8,' + encodeURIComponent(exportContent);
 
-    chrome.downloads.download({
-      url: dataUri,
-      filename: `keywords-${new Date().toISOString().split('T')[0]}.txt`,
-      saveAs: true
-    }, (downloadId) => {
-      if (chrome.runtime.lastError) {
-        console.error('Failed to export keywords:', chrome.runtime.lastError);
-        reject(new Error(`Unable to download file: ${chrome.runtime.lastError.message}`));
-      } else if (downloadId === undefined) {
-        // Fallback for when download fails without setting lastError
-        reject(new Error('Download failed to start. The browser may have blocked it.'));
-      } else {
-        resolve({ success: true });
-      }
+    const downloadId = await new Promise((resolve, reject) => {
+      chrome.downloads.download({
+        url: dataUri,
+        filename: `google-ads-export-${new Date().toISOString().split('T')[0]}.txt`,
+        saveAs: true
+      }, (id) => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+        } else {
+          resolve(id);
+        }
+      });
     });
-  });
+
+    if (downloadId === undefined) {
+      throw new Error('Download failed to start. The browser may have blocked it.');
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('Failed to export keywords:', error);
+    throw new Error(`Unable to download file: ${error.message}`);
+  }
 }
 
 function showNotification(title, message) {
-  chrome.notifications.create({
-    type: "basic",
-    iconUrl: "icons/icon48.png",
-    title: title,
-    message: message
-  });
+  // Try with icon first, fallback to no icon if download fails
+  try {
+    chrome.notifications.create({
+      type: "basic",
+      iconUrl: chrome.runtime.getURL("icons/icon48.png"),
+      title: title,
+      message: message
+    }, (notificationId) => {
+      if (chrome.runtime.lastError) {
+        console.warn('Notification with icon failed:', chrome.runtime.lastError.message);
+        // Fallback: create notification without icon
+        chrome.notifications.create({
+          type: "basic",
+          title: title,
+          message: message
+        });
+      }
+    });
+  } catch (error) {
+    console.error('Notification creation failed:', error);
+    // Final fallback: create notification without icon
+    chrome.notifications.create({
+      type: "basic",
+      title: title,
+      message: message
+    });
+  }
 }

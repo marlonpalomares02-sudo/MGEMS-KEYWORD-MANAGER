@@ -1,0 +1,45 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Beta trials - read-only for users
+    match /beta_trials/{trial} {
+      allow read: if request.auth != null || 
+                     request.resource.data.deviceId == request.resource.data.deviceId;
+      allow create: if false; // Only cloud functions can create
+      allow update: if false; // Only cloud functions can update
+      allow delete: if false; // No deletion allowed
+    }
+    
+    // Password usage - read-only
+    match /password_usage/{usage} {
+      allow read: if false; // Only cloud functions can read
+      allow create: if false; // Only cloud functions can create
+      allow update: if false; // Only cloud functions can update
+      allow delete: if false; // No deletion allowed
+    }
+    
+    // Device fingerprints - read-only
+    match /device_fingerprints/{fingerprint} {
+      allow read: if false; // Only cloud functions can read
+      allow create: if false; // Only cloud functions can create
+      allow update: if false; // Only cloud functions can update
+      allow delete: if false; // No deletion allowed
+    }
+    
+    // Suspicious activity - read-only
+    match /suspicious_activity/{activity} {
+      allow read: if false; // Only cloud functions can read
+      allow create: if false; // Only cloud functions can create
+      allow update: if false; // Only cloud functions can update
+      allow delete: if false; // No deletion allowed
+    }
+    
+    // Analytics - read-only
+    match /analytics/{event} {
+      allow read: if false; // Only cloud functions can read
+      allow create: if false; // Only cloud functions can create
+      allow update: if false; // Only cloud functions can update
+      allow delete: false; // No deletion allowed
+    }
+  }
+}

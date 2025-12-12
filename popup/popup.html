@@ -8,16 +8,20 @@
 <body>
   <div class="header">
     <div>
-      <h1 class="title">Mgemz Keyword Manager</h1>
+      <h1 class="title gradient-text">Mgemz Keyword Manager</h1>
       <p class="tagline">Your Smart Keyword Assistant</p>
     </div>
-    <div>
-      <button id="settings-btn" class="icon-btn">
+    <div class="header-actions">
+      <button id="settings-btn" class="icon-btn" title="Settings">
         <span class="material-icons">settings</span>
       </button>
-      <button id="export-btn" class="export-btn">
+      <button id="export-btn" class="export-btn" title="Export Data">
         <span class="material-icons">download</span> Export
       </button>
+    </div>
+    <div class="keyword-counter" id="keyword-counter">
+      <span class="material-icons">list</span>
+      <span id="keyword-count">0</span> keywords
     </div>
   </div>
 
@@ -56,6 +60,13 @@
       </div>
     </div>
     <div class="setting-option">
+      <label for="gemini-api-key">Gemini API Key</label>
+      <div class="api-key-container">
+        <input type="password" id="gemini-api-key" placeholder="Paste your API key">
+        <button id="save-gemini-api-key-btn" class="save-btn">Save</button>
+      </div>
+    </div>
+    <div class="setting-option">
       <label>Clear Saved Data</label>
       <button id="clear-storage-btn" class="clear-btn">
         <span class="material-icons">delete_sweep</span> Clear Storage
@@ -66,15 +77,15 @@
   <div class="match-type-controls">
     <div class="match-type-option">
       <input type="radio" id="broad" name="match-type" value="broad">
-      <label for="broad">Broad</label>
+      <label for="broad">Broad Match</label>
     </div>
     <div class="match-type-option">
       <input type="radio" id="phrase" name="match-type" value="phrase" checked>
-      <label for="phrase">Phrase</label>
+      <label for="phrase">Phrase Match</label>
     </div>
     <div class="match-type-option">
       <input type="radio" id="exact" name="match-type" value="exact">
-      <label for="exact">Exact</label>
+      <label for="exact">Exact Match</label>
     </div>
   </div>
 
@@ -91,6 +102,9 @@
     <button id="regenerate-btn" class="bottom-btn hidden">
       <span class="material-icons">refresh</span> Regenerate
     </button>
+    <button id="download-suggestions-btn" class="bottom-btn hidden">
+      <span class="material-icons">download</span> Download
+    </button>
   </div>
 
   <div class="generation-section">
@@ -102,15 +116,24 @@
     </button>
     <div id="ads-container" class="ads-container hidden">
       <details open>
-        <summary><h3>Generated Headlines</h3></summary>
+        <summary><div class="ad-output-header">
+          <h3>Generated Headlines</h3>
+          <button id="download-headlines-btn" class="download-btn hidden">Download</button>
+        </div></summary>
         <div id="headlines-container"></div>
       </details>
       <details open>
-        <summary><h3>Generated Descriptions</h3></summary>
+        <summary><div class="ad-output-header">
+          <h3>Generated Descriptions</h3>
+          <button id="download-descriptions-btn" class="download-btn hidden">Download</button>
+        </div></summary>
         <div id="descriptions-container"></div>
       </details>
       <details open>
-        <summary><h3>Call-to-Action Phrases</h3></summary>
+        <summary><div class="ad-output-header">
+          <h3>Call-to-Action Phrases</h3>
+          <button id="download-cta-btn" class="download-btn hidden">Download</button>
+        </div></summary>
         <div id="cta-container"></div>
       </details>
     </div>

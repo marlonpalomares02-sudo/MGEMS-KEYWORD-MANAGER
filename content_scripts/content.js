@@ -96,11 +96,51 @@ window.addEventListener('blur', () => {
 });
 
 // Auto-highlight and save selected keywords
-// Auto-highlight and save selected keywords
+// Enhanced to filter out non-keyword text in Google Keyword Planner
 document.addEventListener('mouseup', (event) => {
   const selection = window.getSelection();
   const selectedText = selection.toString().trim();
+  
   if (selectedText.length > 2 && (isGoogleAdsPage() || isKeywordPlannerPage())) {
+    // Enhanced validation for Google Keyword Planner context
+    if (isKeywordPlannerPage()) {
+      // Filter out common column headers and non-keyword text
+      const invalidPatterns = [
+        /^(Keywords?|Keyword text|Search terms?|Volume|Competition|Avg\.?\s*CPC|Top\s*of\s*page\s*bid|Account|Campaign|Ad\s*group)$/i,
+        /^(Select\s+all|Select\s+keyword|Actions|Download|Edit|Remove)$/i,
+        /^\s*\d+\s*$/, // Pure numbers
+        /^\$\d+/, // Currency amounts
+        /^\d+\.?\d*%$/, // Percentages
+        /^\d+\.?\d*[KMkm]$/, // Numbers with K/M suffixes
+        /^[\s\-\–—]+$/, // Just dashes or spaces
+      ];
+      
+      // Check if the selection is within a table header or contains only invalid patterns
+      const isValidKeyword = !invalidPatterns.some(pattern => pattern.test(selectedText));
+      
+      // Additional check: see if the selection is within a table cell that contains keywords
+      const selectionContainer = selection.getRangeAt(0).commonAncestorContainer;
+      const tableCell = selectionContainer.nodeType === Node.TEXT_NODE 
+        ? selectionContainer.parentElement.closest('td, th')
+        : selectionContainer.closest('td, th');
+      
+      if (tableCell) {
+        const isHeaderCell = tableCell.tagName === 'TH' || 
+                             tableCell.closest('thead') !== null ||
+                             tableCell.textContent.trim().match(/^(Keywords?|Volume|Competition|Avg\.?\s*CPC)$/i);
+        
+        if (isHeaderCell || !isValidKeyword) {
+          console.log('Filtered out non-keyword selection:', selectedText);
+          return; // Don't process this selection
+        }
+      }
+      
+      if (!isValidKeyword) {
+        console.log('Filtered out invalid keyword pattern:', selectedText);
+        return; // Don't process this selection
+      }
+    }
+    
     addKeyword(selectedText, event.target);
   }
 });
@@ -201,8 +241,12 @@ document.addEventListener('click', (event) => {
                            event.target.classList.contains('checked');
           
           if (isChecked) {
+            // Use the new selection manager for individual selections
+            keywordSelectionManager.addKeyword(keyword, keywordCell || row);
             addKeyword(keyword, keywordCell || row);
           } else {
+            // Remove from selection manager
+            keywordSelectionManager.removeKeyword(keyword, keywordCell || row);
             // Use safe message sending to handle extension context invalidation
             extensionUtils.safeSendMessage({ action: 'removeKeyword', keyword: keyword }, () => {
               console.log('Extension context invalidated, keyword removal failed');
@@ -221,6 +265,7 @@ document.addEventListener('click', (event) => {
                              event.target.getAttribute('aria-checked') === 'true' ||
                              event.target.classList.contains('checked');
             if (isChecked) {
+              keywordSelectionManager.addKeyword(fallbackText, row);
               addKeyword(fallbackText, row);
             }
           }
@@ -240,7 +285,28 @@ document.addEventListener('click', (event) => {
 document.addEventListener('dblclick', (event) => {
   const selection = window.getSelection();
   const selectedText = selection.toString().trim();
+  
   if (selectedText.length > 2 && (isGoogleAdsPage() || isKeywordPlannerPage())) {
+    // Apply same filtering logic as mouseup for consistency
+    if (isKeywordPlannerPage()) {
+      const invalidPatterns = [
+        /^(Keywords?|Keyword text|Search terms?|Volume|Competition|Avg\.?\s*CPC|Top\s*of\s*page\s*bid|Account|Campaign|Ad\s*group)$/i,
+        /^(Select\s+all|Select\s+keyword|Actions|Download|Edit|Remove)$/i,
+        /^\s*\d+\s*$/, // Pure numbers
+        /^\$\d+/, // Currency amounts
+        /^\d+\.?\d*%$/, // Percentages
+        /^\d+\.?\d*[KMkm]$/, // Numbers with K/M suffixes
+        /^[\s\-\–—]+$/, // Just dashes or spaces
+      ];
+      
+      const isValidKeyword = !invalidPatterns.some(pattern => pattern.test(selectedText));
+      
+      if (!isValidKeyword) {
+        console.log('Filtered out invalid keyword pattern on double-click:', selectedText);
+        return;
+      }
+    }
+    
     addKeyword(selectedText, event.target);
   }
 });
@@ -367,10 +433,218 @@ function findBestHighlightTarget(element) {
   return target || element;
 }
 
+// Add multiple keywords at once with enhanced functionality
+async function addMultipleKeywords(keywordsData) {
+  try {
+    // Extract keyword objects from the data
+    const keywordObjects = keywordsData.map(data => ({
+      text: data.text,
+      timestamp: Date.now(),
+      source: 'bulk_selection',
+      isNew: true,
+      keywordData: data.keywordData || null
+    }));
+
+    // Send bulk keywords to background script
+    const response = await extensionUtils.safeSendMessage({
+      action: 'addKeywordsBulk',
+      keywords: keywordObjects
+    });
+
+    if (response && response.success) {
+      console.log(`Added ${response.totalAdded} keywords from bulk selection`);
+      
+      // Highlight all added keywords
+      keywordsData.forEach(data => {
+        if (data.keywordCell) {
+          highlightElement(data.keywordCell, data.text);
+        }
+      });
+      
+      // Notify all extension components about the update
+      extensionUtils.safeSendMessage({ action: 'keywordsUpdated' });
+      
+      return response;
+    } else {
+      console.error('Failed to add keywords:', response);
+      return { success: false, error: 'Failed to add keywords' };
+    }
+  } catch (error) {
+    console.error('Bulk keyword addition error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// Enhanced multiple keyword selection system
+class KeywordSelectionManager {
+  constructor() {
+    this.selectedKeywords = new Set();
+    this.isBulkSelection = false;
+    this.selectionStartTime = null;
+    this.lastSelectionTime = null;
+  }
+
+  // Add keyword to selection
+  addKeyword(keyword, element) {
+    if (this.isValidKeyword(keyword)) {
+      this.selectedKeywords.add(keyword);
+      this.highlightSelectedElement(element, true);
+      this.showSelectionFeedback(`+1 keyword selected (${this.selectedKeywords.size} total)`);
+    }
+  }
+
+  // Remove keyword from selection
+  removeKeyword(keyword, element) {
+    this.selectedKeywords.delete(keyword);
+    this.highlightSelectedElement(element, false);
+    this.showSelectionFeedback(`-1 keyword removed (${this.selectedKeywords.size} remaining)`);
+  }
+
+  // Check if keyword is valid
+  isValidKeyword(keyword) {
+    const invalidPatterns = [
+      /^(Keywords?|Keyword text|Search terms?|Volume|Competition|Avg\.?\s*CPC|Top\s*of\s*page\s*bid|Account|Campaign|Ad\s*group)$/i,
+      /^(Select\s+all|Select\s+keyword|Actions|Download|Edit|Remove)$/i,
+      /^\s*\d+\s*$/, // Pure numbers
+      /^\$\d+/, // Currency amounts
+      /^\d+\.?\d*%$/, // Percentages
+      /^\d+\.?\d*[KMkm]$/, // Numbers with K/M suffixes
+      /^[\s\-\–—]+$/, // Just dashes or spaces
+    ];
+    
+    return keyword && keyword.length > 2 && !invalidPatterns.some(pattern => pattern.test(keyword));
+  }
+
+  // Highlight selected elements
+  highlightSelectedElement(element, isSelected) {
+    const targetElement = this.findBestHighlightTarget(element);
+    if (isSelected) {
+      targetElement.classList.add('keyword-selected');
+      targetElement.style.backgroundColor = 'rgba(76, 175, 80, 0.1)';
+      targetElement.style.borderLeft = '3px solid #4CAF50';
+    } else {
+      targetElement.classList.remove('keyword-selected');
+      targetElement.style.backgroundColor = '';
+      targetElement.style.borderLeft = '';
+    }
+  }
+
+  // Find best element to highlight
+  findBestHighlightTarget(element) {
+    let target = element.closest('.keyword-cell, [data-keyword], .keyword-row, .keyword-text, td, tr');
+    if (!target) {
+      target = element.closest('td, li, .cell, .item');
+    }
+    return target || element;
+  }
+
+  // Show selection feedback
+  showSelectionFeedback(message) {
+    this.showQuickNotification(message, null, false, 1500);
+  }
+
+  // Show quick notification
+  showQuickNotification(message, targetElement, isError = false, duration = 2000) {
+    const notification = document.createElement('div');
+    notification.className = 'quick-notification';
+    notification.textContent = message;
+    notification.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: ${isError ? '#f44336' : '#4CAF50'};
+      color: white;
+      padding: 12px 16px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      z-index: 10000;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      transform: translateX(100%);
+      transition: transform 0.3s ease;
+      max-width: 300px;
+      word-wrap: break-word;
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Animate in
+    setTimeout(() => {
+      notification.style.transform = 'translateX(0)';
+    }, 10);
+    
+    // Animate out and remove
+    setTimeout(() => {
+      notification.style.transform = 'translateX(100%)';
+      setTimeout(() => {
+        if (notification.parentNode) {
+          notification.parentNode.removeChild(notification);
+        }
+      }, 300);
+    }, duration);
+  }
+
+  // Process bulk selection
+  async processBulkSelection() {
+    if (this.selectedKeywords.size === 0) return;
+
+    const keywordsArray = Array.from(this.selectedKeywords).map(keyword => ({
+      text: keyword,
+      timestamp: Date.now(),
+      source: 'bulk_selection',
+      isNew: true
+    }));
+
+    try {
+      // Send bulk keywords to background script
+      const response = await extensionUtils.safeSendMessage({
+        action: 'addKeywordsBulk',
+        keywords: keywordsArray
+      });
+
+      if (response && response.success) {
+        this.showQuickNotification(`✅ Added ${response.totalAdded} keywords successfully!`, null, false, 3000);
+        
+        // Clear selection after successful addition
+        this.clearSelection();
+        
+        // Notify all extension components about the update
+        extensionUtils.safeSendMessage({ action: 'keywordsUpdated' });
+      } else {
+        this.showQuickNotification('❌ Failed to add keywords', null, true);
+      }
+    } catch (error) {
+      console.error('Bulk selection error:', error);
+      this.showQuickNotification('❌ Error adding keywords', null, true);
+    }
+  }
+
+  // Clear current selection
+  clearSelection() {
+    // Remove visual highlights
+    document.querySelectorAll('.keyword-selected').forEach(element => {
+      element.classList.remove('keyword-selected');
+      element.style.backgroundColor = '';
+      element.style.borderLeft = '';
+    });
+    
+    this.selectedKeywords.clear();
+    this.isBulkSelection = false;
+  }
+
+  // Get current selection count
+  getSelectionCount() {
+    return this.selectedKeywords.size;
+  }
+}
+
+// Initialize keyword selection manager
+const keywordSelectionManager = new KeywordSelectionManager();
+
 // Handle select all checkboxes in Keyword Planner
 async function handleSelectAllCheckboxes(isChecked) {
   try {
-    const keywordRows = document.querySelectorAll('tr.keyword-row, tr[data-keyword], .keyword-table tbody tr');
+    const keywordRows = document.querySelectorAll('tr.keyword-row, tr[data-keyword], .keyword-table tbody tr, tbody tr');
     
     if (isChecked) {
       // Select all - capture all keywords
@@ -383,9 +657,6 @@ async function handleSelectAllCheckboxes(isChecked) {
         if (keywordCell && checkbox && !checkbox.checked) {
           const keywordText = keywordCell.textContent.trim();
           if (keywordText) {
-            // Get additional keyword data
-            const searchVolume = row.querySelector('td:nth-child(2)')?.textContent.trim();
-            const competition = row.querySelector('td:nth-child(5)')?.textContent.trim();
             const bidLow = row.querySelector('td:nth-child(8)')?.textContent.trim();
             const bidHigh = row.querySelector('td:nth-child(9)')?.textContent.trim();
             
@@ -416,6 +687,14 @@ async function handleSelectAllCheckboxes(isChecked) {
       // Add all keywords in bulk
       if (keywordsToAdd.length > 0) {
         await addMultipleKeywords(keywordsToAdd);
+        
+        // Use keyword selection manager for enhanced feedback
+        keywordSelectionManager.showQuickNotification(
+          `✅ Added ${keywordsToAdd.length} keywords successfully!`, 
+          null, 
+          false, 
+          3000
+        );
       }
       
     } else {
@@ -751,6 +1030,13 @@ function saveKeywordToLocalStorage(keywordObject) {
       savedKeywords.push(keywordObject);
       localStorage.setItem('googleAdsKeywords', JSON.stringify(savedKeywords));
       console.log('Keyword saved to localStorage fallback:', keywordObject.text);
+      
+      // Try to sync immediately if extension context is available
+      setTimeout(() => {
+        if (extensionUtils.isValidContext()) {
+          syncLocalStorageKeywords();
+        }
+      }, 1000);
     }
   } catch (error) {
     console.error('Failed to save to localStorage:', error);
@@ -775,6 +1061,9 @@ function syncLocalStorageKeywords() {
           // Clear localStorage after successful sync
           localStorage.removeItem('googleAdsKeywords');
           console.log('LocalStorage keywords synced successfully');
+          
+          // Force update the popup UI by sending keywordsUpdated message
+          extensionUtils.safeSendMessage({ action: 'keywordsUpdated' });
         }
       }).catch(error => {
         console.error('Failed to sync localStorage keywords:', error);

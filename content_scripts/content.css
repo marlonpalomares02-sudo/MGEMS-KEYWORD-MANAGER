@@ -98,6 +98,133 @@ body.ctrl-pressed .keyword-cell:hover {
   border-radius: 8px !important;
   background: rgba(66, 133, 244, 0.95) !important;
   color: white !important;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+  backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
+  border: 1px solid rgba(255,255,255,0.1) !important;
+  animation: slideInRight 0.3s ease !important;
+  max-width: 300px !important;
+  word-wrap: break-word !important;
+  z-index: 10000 !important;
+}
+
+/* Enhanced multiple selection styles */
+.keyword-selected {
+  background-color: rgba(76, 175, 80, 0.1) !important;
+  border-left: 3px solid #4CAF50 !important;
+  transition: all 0.2s ease !important;
+}
+
+.keyword-selected:hover {
+  background-color: rgba(76, 175, 80, 0.15) !important;
+}
+
+/* Bulk selection indicator */
+.bulk-selection-indicator {
+  position: fixed !important;
+  top: 20px !important;
+  right: 20px !important;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  color: white !important;
+  padding: 12px 20px !important;
+  border-radius: 25px !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  box-shadow: 0 8px 25px rgba(0,0,0,0.15) !important;
+  z-index: 10001 !important;
+  animation: fadeInScale 0.3s ease !important;
+  backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
+  border: 1px solid rgba(255,255,255,0.2) !important;
+}
+
+/* Quick notification styles */
+.quick-notification {
+  position: fixed !important;
+  top: 20px !important;
+  right: 20px !important;
+  background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%) !important;
+  color: white !important;
+  padding: 12px 16px !important;
+  border-radius: 8px !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  z-index: 10000 !important;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+  backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
+  border: 1px solid rgba(255,255,255,0.1) !important;
+  transform: translateX(100%) !important;
+  transition: transform 0.3s ease !important;
+  max-width: 300px !important;
+  word-wrap: break-word !important;
+}
+
+.quick-notification.error {
+  background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%) !important;
+}
+
+/* Real-time keyword counter */
+.keyword-counter {
+  position: fixed !important;
+  bottom: 20px !important;
+  right: 20px !important;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  color: white !important;
+  padding: 8px 16px !important;
+  border-radius: 20px !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.2) !important;
+  z-index: 9999 !important;
+  animation: slideInUp 0.3s ease !important;
+  backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
+  border: 1px solid rgba(255,255,255,0.2) !important;
+}
+
+/* Enhanced hover effects for better UX */
+.keyword-cell:hover {
+  background-color: rgba(66, 133, 244, 0.05) !important;
+  cursor: pointer !important;
+  border-radius: 4px !important;
+  transition: all 0.2s ease !important;
+}
+
+/* Animations */
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideInUp {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeInScale {
+  from {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+  color: white !important;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
   max-width: 300px !important;
   white-space: pre-line !important;

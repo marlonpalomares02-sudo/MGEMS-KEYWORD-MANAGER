@@ -4,6 +4,24 @@
     transition: all 0.3s ease;
     animation: pulse 0.5s;
   }
+
+  .keyword-selected {
+    background-color: rgba(76, 175, 80, 0.1) !important;
+    border-left: 3px solid #4CAF50 !important;
+    transition: all 0.3s ease;
+    position: relative;
+  }
+
+  .keyword-selected::before {
+    content: '✓';
+    position: absolute;
+    left: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #4CAF50;
+    font-weight: bold;
+    font-size: 14px;
+  }
   
   @keyframes pulse {
     0% { transform: scale(1); }

@@ -3,7 +3,7 @@
   "name": "Mgemz Keyword Manager",
   "description": "your smart keyword assistant.",
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'"
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src https://api.deepseek.com https://generativelanguage.googleapis.com;"
   },
   "version": "2.1",
   "icons": {
@@ -19,15 +19,17 @@
     "clipboardWrite",
     "notifications",
     "contextMenus",
-    "downloads"
+    "downloads",
+    "management"
   ],
   "host_permissions": [
     "https://ads.google.com/*",
     "https://keywordplanner.google.com/*",
-    "https://api.deepseek.com/*"
+    "https://api.deepseek.com/*",
+    "https://us-central1-mgemz-beta.cloudfunctions.net/*"
   ],
   "background": {
-    "service_worker": "background_scripts/background.js"
+    "service_worker": "background_scripts/backgroundWithBeta.js"
   },
   "action": {
     "default_popup": "popup/popup.html",
